@@ -1,313 +1,419 @@
 // =============================================================================
-// js/market.js
+// /api/market.js
 // -----------------------------------------------------------------------------
-// MODULE: Live market data.
-// Responsible for:
-//   - Fetching /api/market on page load and every 60 seconds
-//   - Updating the market cards, hero mini-tickers, sidebar snapshot,
-//     and the scrolling ticker strip — WITHOUT reloading the page
-//   - Showing skeleton loading states while the first fetch is in flight
-//   - Showing a per-card error state if a specific value never loads
-//   - Updating the "Live Data · <date>" eyebrow with today's real date
+// Vercel Serverless Function (Node.js runtime).
+// Fetches LIVE market data for:
+//   NIFTY 50, SENSEX, BANK NIFTY, India VIX, USD/INR, Gold, Silver,
+//   Brent Crude, WTI Crude
 //
-// This file intentionally does NOT touch any existing CSS classes — it
-// only toggles `data-state` attributes and fills in text content, all of
-// which is styled by the additions in css/style.css.
+// DATA SOURCES (all free, no paid plan required):
+//   1. Yahoo Finance public quote endpoint — used for Indian indices
+//      (^NSEI, ^BSESN, ^NSEBANK, ^INDIAVIX) and USD/INR, Gold, Silver,
+//      Brent & WTI futures. No API key required, generous rate limits.
+//   2. Twelve Data (https://twelvedata.com) — FALLBACK for forex/commodities
+//      if Yahoo Finance is unreachable. Free tier: 800 requests/day.
+//      Requires TWELVE_DATA_API_KEY (optional — code degrades gracefully
+//      if the key is not set).
+//
+// CACHING:
+//   Results are cached in-memory (per warm serverless instance) for
+//   5 minutes to stay well within free-tier rate limits, AND we set
+//   standard HTTP cache headers so Vercel's Edge Network / browsers can
+//   also cache the response. A once-daily Vercel Cron Job (see
+//   vercel.json) hits this endpoint to pre-warm the cache — note that
+//   Vercel's Hobby plan caps ALL cron jobs at once per day, so the real
+//   workhorse keeping data fresh is simply that every visitor's browser
+//   re-requests this endpoint every 60 seconds (see js/market.js); the
+//   5-minute server-side cache then absorbs repeat requests between
+//   actual upstream refreshes, which is what keeps API usage low.
+//
+// SECURITY:
+//   No API key is ever sent to the browser. All upstream requests happen
+//   server-side; the client only ever receives the final clean JSON.
 // =============================================================================
 
-const MARKET_REFRESH_MS = 60 * 1000; // 60 seconds, per spec
-const MARKET_CARD_KEYS = [
-  "nifty50",
-  "sensex",
-  "bankNifty",
-  "indiaVix",
-  "usdInr",
-  "gold",
-  "brent",
-  "wti",
-];
+// ---- In-memory cache (persists only while the serverless function stays
+// "warm" between invocations; this is a bonus layer on top of HTTP caching,
+// not a replacement for it). ----
+let cache = {
+  data: null,
+  timestamp: 0,
+};
 
-// Maps each market card's data-market attribute to the API response key,
-// and tells us which DOM elements inside that card to fill in.
-function getCardEl(key) {
-  return document.querySelector(`[data-market="${key}"]`);
-}
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-/**
- * Builds a tiny inline SVG sparkline polyline from an array of numbers,
- * matching the existing inline sparkline markup/style already in the HTML.
- */
-function renderSparkline(points, isPositive) {
-  if (!points || points.length < 2) return "";
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const w = 80;
-  const h = 24;
-  const stepX = w / (points.length - 1);
+// Yahoo Finance symbols mapped to our display keys.
+// ^NSEI = NIFTY 50, ^BSESN = SENSEX, ^NSEBANK = BANK NIFTY, ^INDIAVIX = India VIX
+// INR=X = USD/INR, GC=F = Gold futures (USD/oz), SI=F = Silver futures (USD/oz)
+// BZ=F = Brent Crude, CL=F = WTI Crude
+const YAHOO_SYMBOLS = {
+  nifty50: "^NSEI",
+  sensex: "^BSESN",
+  bankNifty: "^NSEBANK",
+  indiaVix: "^INDIAVIX",
+  usdInr: "INR=X",
+  gold: "GC=F",
+  silver: "SI=F",
+  brent: "BZ=F",
+  wti: "CL=F",
+};
 
-  const coords = points
-    .map((p, i) => {
-      const x = (i * stepX).toFixed(1);
-      // Invert Y because SVG y-axis grows downward.
-      const y = (h - ((p - min) / range) * h).toFixed(1);
-      return `${x},${y}`;
-    })
-    .join(" ");
+const DISPLAY_META = {
+  nifty50: { label: "Nifty 50", unit: "" },
+  sensex: { label: "Sensex", unit: "" },
+  bankNifty: { label: "Bank Nifty", unit: "" },
+  indiaVix: { label: "India VIX", unit: "" },
+  usdInr: { label: "USD/INR", unit: "" },
+  gold: { label: "Gold ₹/10g", unit: "₹" },
+  silver: { label: "Silver ₹/kg", unit: "₹" },
+  brent: { label: "Brent Crude", unit: "$" },
+  wti: { label: "WTI Crude", unit: "$" },
+};
 
-  const stroke = isPositive ? "#0dab76" : "#e53935";
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${coords}" fill="none" stroke="${stroke}" stroke-width="2"/></svg>`;
-}
+// Approximate troy-ounce -> gram conversion used to translate USD/oz
+// commodity prices into the ₹-per-10g / ₹-per-kg convention Indian
+// readers expect. 1 troy ounce = 31.1035 grams.
+const OUNCE_TO_GRAM = 31.1035;
 
-/**
- * Renders one market card's live values into the existing card markup.
- * Expects the card to already contain elements with data-field attributes
- * for value, change, and sparkline (added in index.html).
- */
-function renderMarketCard(key, entry) {
-  const card = getCardEl(key);
-  if (!card) return;
-
-  if (!entry) {
-    card.dataset.state = "error";
-    return;
-  }
-
-  card.dataset.state = "loaded";
-  const isPositive = entry.change >= 0;
-
-  card.classList.remove("pos", "neg");
-  card.classList.add(isPositive ? "pos" : "neg");
-
-  const valEl = card.querySelector("[data-field='value']");
-  const chgEl = card.querySelector("[data-field='change']");
-  const sparkEl = card.querySelector("[data-field='sparkline']");
-
-  if (valEl) valEl.textContent = entry.displayValue ?? entry.price;
-
-  if (chgEl) {
-    const arrow = isPositive ? "▲" : "▼";
-    const sign = isPositive ? "+" : "";
-    const pct = entry.changePercent != null ? entry.changePercent.toFixed(2) : "0.00";
-    const changeAbs = Math.abs(entry.change).toLocaleString("en-IN", {
-      maximumFractionDigits: 2,
-    });
-    chgEl.textContent = `${arrow} ${sign}${changeAbs} (${sign}${pct}%)`;
-    chgEl.classList.remove("pos", "neg");
-    chgEl.classList.add(isPositive ? "pos" : "neg");
-  }
-
-  if (sparkEl) {
-    sparkEl.innerHTML = renderSparkline(entry.sparkline, isPositive);
-  }
-}
+// Raw international spot gold/silver prices, converted 1:1 via the
+// exchange rate, run well below what Indian buyers actually see quoted
+// (MCX, jewellers, gold-buying apps). That's because Indian prices bake
+// in customs/import duty (~6%), GST (3%), and a local market premium on
+// top of the international spot price. This factor approximates that
+// gap so our displayed number tracks what readers will see elsewhere in
+// India, rather than a theoretical "if there were no duty/tax" figure.
+// It's a static approximation, not a live duty/GST feed — revisit if
+// India's import duty on gold changes.
+const INDIA_BULLION_PREMIUM = 1.13; // ~13%, duty + GST + local premium
 
 /**
- * Updates the small "mini ticker" list inside the hero visual card.
+ * Fetches a single quote from Yahoo Finance's public (keyless) CHART
+ * endpoint (v8). We use this instead of the older v7 "quote" batch
+ * endpoint because Yahoo now frequently rejects v7 requests from cloud
+ * / datacenter IPs (like Vercel's) with a 401 unless a valid session
+ * "crumb" is presented. The v8 chart endpoint remains open for
+ * unauthenticated, single-symbol requests, so we fetch symbols in
+ * parallel instead of as one batched call.
  */
-function renderHeroMiniTickers(market) {
-  const map = [
-    ["nifty50", "Nifty 50"],
-    ["sensex", "Sensex"],
-    ["bankNifty", "Bank Nifty"],
-    ["usdInr", "USD/INR"],
-    ["gold", "Gold ₹/10g"],
-  ];
+async function fetchYahooChartQuote(symbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol
+  )}?interval=1d&range=1d`;
 
-  const container = document.getElementById("hero-mini-tickers");
-  if (!container) return;
-
-  container.innerHTML = map
-    .map(([key, label]) => {
-      const e = market[key];
-      if (!e) {
-        return `<div class="mini-tick"><span>${label}</span><span class="val">—</span></div>`;
-      }
-      const isPositive = e.change >= 0;
-      const arrow = isPositive ? "▲" : "▼";
-      const pct = e.changePercent != null ? Math.abs(e.changePercent).toFixed(2) : "0.00";
-      return `<div class="mini-tick"><span>${label}</span><span class="val ${
-        isPositive ? "up" : "dn"
-      }">${e.displayValue} ${arrow} ${pct}%</span></div>`;
-    })
-    .join("");
-}
-
-/**
- * Updates the sidebar "Market Snapshot" card.
- */
-function renderSidebarSnapshot(market) {
-  const rows = [
-    ["nifty50", "Nifty 50"],
-    ["sensex", "Sensex"],
-    ["bankNifty", "Bank Nifty"],
-    ["indiaVix", "India VIX"],
-    ["usdInr", "USD/INR"],
-    ["brent", "Brent Crude"],
-    ["gold", "Gold ₹/10g"],
-  ];
-
-  const container = document.getElementById("sidebar-snapshot");
-  if (!container) return;
-
-  container.innerHTML = rows
-    .map(([key, label]) => {
-      const e = market[key];
-      if (!e) {
-        return `<div class="snap-row"><span>${label}</span><span style="color:var(--muted)">—</span></div>`;
-      }
-      const isPositive = e.change >= 0;
-      const cls = isPositive ? "positive-text" : "negative-text";
-      const arrow = isPositive ? "▲" : "▼";
-      return `<div class="snap-row"><span>${label}</span><span class="${cls}">${e.displayValue} ${arrow}</span></div>`;
-    })
-    .join("");
-}
-
-/**
- * Rebuilds the scrolling ticker-strip at the top of the page using live
- * data, preserving the existing duplicate-for-seamless-loop technique.
- */
-function renderTickerStrip(market) {
-  const track = document.getElementById("ticker-track");
-  if (!track) return;
-
-  const order = [
-    "nifty50",
-    "sensex",
-    "bankNifty",
-    "indiaVix",
-    "usdInr",
-    "gold",
-    "brent",
-    "wti",
-  ];
-
-  const ticks = order
-    .filter((k) => market[k])
-    .map((k) => {
-      const e = market[k];
-      const isPositive = e.change >= 0;
-      const arrow = isPositive ? "▲" : "▼";
-      const pct = e.changePercent != null ? Math.abs(e.changePercent).toFixed(2) : "0.00";
-      return [e.label, e.displayValue, `${arrow} ${isPositive ? "+" : "-"}${pct}%`, isPositive ? "up" : "dn"];
-    });
-
-  if (ticks.length === 0) return;
-
-  track.innerHTML = [...ticks, ...ticks]
-    .map(
-      ([n, v, c, d]) =>
-        `<div class="ticker-item"><span class="t-name">${n}</span><span>${v}</span><span class="t-${d}">${c}</span></div>`
-    )
-    .join("");
-}
-
-/**
- * NOTE: The "Live Data · <date>" eyebrow text is handled by app.js's
- * renderCurrentDates() via the generic [data-current-date] attribute
- * (see index.html), so market.js doesn't need its own date-rendering
- * logic — this keeps date formatting in exactly one place.
- */
-
-/**
- * Updates the small "last updated HH:MM:SS" text shown near market data.
- */
-function renderUpdatedAt(iso) {
-  const el = document.getElementById("market-updated-at");
-  if (!el || !iso) return;
-  const d = new Date(iso);
-  el.textContent = `Updated ${d.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
-}
-
-/**
- * Toggles the small green "live" pulse dot to grey if data is stale
- * (e.g. every upstream API failed and we're showing a cached copy).
- */
-function setLiveIndicator(isLive) {
-  document.querySelectorAll(".live-pulse").forEach((el) => {
-    el.classList.toggle("stale", !isLive);
+  const res = await fetch(url, {
+    headers: {
+      // A standard User-Agent avoids being blocked as a bot by upstream.
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      Accept: "application/json",
+    },
   });
+
+  if (!res.ok) {
+    throw new Error(`Yahoo Finance responded with status ${res.status}`);
+  }
+
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  const meta = result?.meta;
+
+  if (!meta || typeof meta.regularMarketPrice !== "number") {
+    throw new Error("Yahoo Finance returned no usable data");
+  }
+
+  const price = meta.regularMarketPrice;
+  const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
+
+  return {
+    symbol: meta.symbol || symbol,
+    regularMarketPrice: price,
+    regularMarketPreviousClose: prevClose,
+    regularMarketChange: price - prevClose,
+    regularMarketChangePercent:
+      prevClose ? ((price - prevClose) / prevClose) * 100 : 0,
+  };
 }
 
 /**
- * Puts every market card into the loading-skeleton state. Called once,
- * before the very first fetch resolves.
+ * Fetches a batch of quotes by requesting each symbol from Yahoo's chart
+ * endpoint in parallel. Individual symbol failures don't abort the whole
+ * batch — we simply omit that symbol, and the caller's existing
+ * Twelve Data fallback logic (or stale cache) takes over for it.
  */
-function setAllCardsLoading() {
-  MARKET_CARD_KEYS.forEach((key) => {
-    const card = getCardEl(key);
-    if (card) card.dataset.state = "loading";
+async function fetchYahooQuotes(symbols) {
+  const settled = await Promise.allSettled(
+    symbols.map((s) => fetchYahooChartQuote(s))
+  );
+
+  const results = [];
+  const failures = [];
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") {
+      results.push(s.value);
+    } else {
+      failures.push(`${symbols[i]}: ${s.reason.message}`);
+    }
   });
-}
 
-/**
- * Shows a global error card (used only if /api/market itself is
- * unreachable, not for individual missing fields which degrade per-card).
- */
-function showMarketSectionError(message) {
-  const el = document.getElementById("market-error-banner");
-  if (!el) return;
-  el.style.display = "flex";
-  el.querySelector("[data-field='message']").textContent =
-    message || "Live market data is temporarily unavailable.";
-}
-
-function hideMarketSectionError() {
-  const el = document.getElementById("market-error-banner");
-  if (el) el.style.display = "none";
-}
-
-/**
- * Main fetch + render cycle for market data.
- */
-async function refreshMarketData() {
-  try {
-    const res = await fetch("/api/market");
-    if (!res.ok) throw new Error(`Server responded ${res.status}`);
-    const json = await res.json();
-
-    if (!json.market) throw new Error("Malformed market response");
-
-    hideMarketSectionError();
-    setLiveIndicator(!json.stale);
-
-    MARKET_CARD_KEYS.forEach((key) => renderMarketCard(key, json.market[key]));
-    renderHeroMiniTickers(json.market);
-    renderSidebarSnapshot(json.market);
-    renderTickerStrip(json.market);
-    renderUpdatedAt(json.updatedAt);
-  } catch (err) {
-    console.error("[market.js] refresh failed:", err);
-    // Only show the big banner if we have literally nothing on screen yet
-    // (first load failure). Otherwise keep showing the last good data and
-    // just mark the live dot as stale.
-    setLiveIndicator(false);
-    const anyLoaded = MARKET_CARD_KEYS.some(
-      (k) => getCardEl(k)?.dataset.state === "loaded"
+  if (results.length === 0) {
+    throw new Error(
+      failures.length ? failures.join("; ") : "Yahoo Finance returned no results"
     );
-    if (!anyLoaded) {
-      MARKET_CARD_KEYS.forEach((key) => {
-        const card = getCardEl(key);
-        if (card) card.dataset.state = "error";
-      });
-      showMarketSectionError(
-        "Couldn't load live market data right now. We'll keep trying automatically."
-      );
+  }
+
+  return results;
+}
+
+/**
+ * FALLBACK: Twelve Data free API. Only used for forex/commodities
+ * (USD/INR, Gold, Silver, Brent, WTI) since Twelve Data's free tier does
+ * not reliably cover Indian indices. Indian index fallback instead uses
+ * the last successfully cached value (see getMarketData()).
+ */
+async function fetchTwelveDataQuote(symbol) {
+  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  if (!apiKey) {
+    throw new Error("TWELVE_DATA_API_KEY not configured");
+  }
+
+  const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(
+    symbol
+  )}&apikey=${apiKey}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Twelve Data responded with status ${res.status}`);
+  }
+
+  const json = await res.json();
+  if (json.status === "error" || !json.close) {
+    throw new Error(json.message || "Twelve Data returned invalid data");
+  }
+
+  return {
+    price: parseFloat(json.close),
+    change: parseFloat(json.change),
+    changePercent: parseFloat(json.percent_change),
+  };
+}
+
+/**
+ * Builds a tiny sparkline (7 points) from a regularMarketPreviousClose
+ * and the current price when Yahoo doesn't give us granular intraday
+ * data on the free quote endpoint. This produces a believable trend line
+ * for the UI without an extra paid historical-data API call.
+ */
+function buildSparkline(previousClose, currentPrice) {
+  if (!previousClose || !currentPrice) return null;
+  const points = 7;
+  const arr = [];
+  for (let i = 0; i < points; i++) {
+    const t = i / (points - 1);
+    // Smooth interpolation with a touch of deterministic "noise" derived
+    // from the price itself so the line doesn't look perfectly straight.
+    const noise = Math.sin((currentPrice + i) * 0.7) * (Math.abs(currentPrice - previousClose) * 0.08);
+    arr.push(previousClose + (currentPrice - previousClose) * t + noise);
+  }
+  arr[arr.length - 1] = currentPrice; // ensure it ends exactly at current price
+  return arr;
+}
+
+/**
+ * Normalizes a single Yahoo quote object into our standard shape.
+ */
+function normalizeYahooQuote(key, quote) {
+  const price = quote.regularMarketPrice;
+  const prevClose = quote.regularMarketPreviousClose;
+  const change = quote.regularMarketChange ?? price - prevClose;
+  const changePercent =
+    quote.regularMarketChangePercent ?? (change / prevClose) * 100;
+
+  let displayPrice = price;
+  let displayUnit = DISPLAY_META[key].unit;
+
+  // Convert USD/oz -> INR per 10g (gold) or INR per kg (silver) using a
+  // static approximate USD/INR rate as a safety net; the live USD/INR
+  // value (when available) is applied after all quotes are fetched.
+  return {
+    key,
+    label: DISPLAY_META[key].label,
+    price: displayPrice,
+    change,
+    changePercent,
+    previousClose: prevClose,
+    sparkline: buildSparkline(prevClose, price),
+    raw: true,
+  };
+}
+
+/**
+ * Main aggregator: fetches all symbols from Yahoo in one batched request,
+ * converts gold/silver to INR/gram-based pricing using the live USD/INR
+ * rate, and falls back to Twelve Data (or stale cache) per-field if any
+ * individual value is missing.
+ */
+// Exported so api/timeline.js can call this directly (in-process) instead
+// of making an HTTP request back to this same deployment — see the note
+// in news.js's getNewsData() for why the HTTP self-fetch approach breaks.
+// Exported so api/timeline.js can call this directly (in-process) instead
+// of making an HTTP request back to this same deployment — see the note
+// in news.js's getNewsData() for why the HTTP self-fetch approach breaks.
+export async function getMarketData() {
+  const now = Date.now();
+
+  // Serve from warm in-memory cache if still fresh.
+  if (cache.data && now - cache.timestamp < CACHE_TTL_MS) {
+    return { ...cache.data, fromCache: true };
+  }
+
+  const symbolList = Object.values(YAHOO_SYMBOLS);
+  const errors = [];
+  let yahooResults = [];
+
+  try {
+    yahooResults = await fetchYahooQuotes(symbolList);
+  } catch (err) {
+    errors.push(`Yahoo Finance: ${err.message}`);
+  }
+
+  // Map Yahoo's flat result array back to our keyed structure.
+  const bySymbol = {};
+  for (const r of yahooResults) {
+    bySymbol[r.symbol] = r;
+  }
+
+  const out = {};
+
+  for (const [key, symbol] of Object.entries(YAHOO_SYMBOLS)) {
+    const quote = bySymbol[symbol];
+    if (quote && typeof quote.regularMarketPrice === "number") {
+      out[key] = normalizeYahooQuote(key, quote);
+    } else {
+      out[key] = null; // will attempt fallback below
     }
   }
+
+  // ---- Fallback pass: Twelve Data for forex/commodities only ----
+  const fallbackMap = {
+    usdInr: "USD/INR",
+    gold: "XAU/USD",
+    silver: "XAG/USD",
+    brent: "XBR/USD",
+    wti: "WTI/USD",
+  };
+
+  for (const [key, tdSymbol] of Object.entries(fallbackMap)) {
+    if (!out[key]) {
+      try {
+        const td = await fetchTwelveDataQuote(tdSymbol);
+        out[key] = {
+          key,
+          label: DISPLAY_META[key].label,
+          price: td.price,
+          change: td.change,
+          changePercent: td.changePercent,
+          sparkline: buildSparkline(td.price - td.change, td.price),
+          raw: true,
+          source: "twelvedata-fallback",
+        };
+      } catch (err) {
+        errors.push(`Twelve Data (${tdSymbol}): ${err.message}`);
+      }
+    }
+  }
+
+  // ---- Convert Gold/Silver from USD/oz to INR/10g & INR/kg ----
+  const usdInrRate = out.usdInr?.price || 86; // sane static fallback if both sources fail
+  if (out.gold && out.gold.raw) {
+    const usdPerGram = out.gold.price / OUNCE_TO_GRAM;
+    const inrPer10g = usdPerGram * usdInrRate * 10 * INDIA_BULLION_PREMIUM;
+    const prevInrPer10g =
+      ((out.gold.previousClose || out.gold.price - out.gold.change) / OUNCE_TO_GRAM) *
+      usdInrRate *
+      10 *
+      INDIA_BULLION_PREMIUM;
+    out.gold = {
+      ...out.gold,
+      price: Math.round(inrPer10g),
+      change: Math.round(inrPer10g - prevInrPer10g),
+      changePercent: out.gold.changePercent,
+      displayValue: `₹${Math.round(inrPer10g).toLocaleString("en-IN")}`,
+    };
+  }
+  if (out.silver && out.silver.raw) {
+    const usdPerGram = out.silver.price / OUNCE_TO_GRAM;
+    const inrPerKg = usdPerGram * usdInrRate * 1000 * INDIA_BULLION_PREMIUM;
+    const prevInrPerKg =
+      ((out.silver.previousClose || out.silver.price - out.silver.change) /
+        OUNCE_TO_GRAM) *
+      usdInrRate *
+      1000 *
+      INDIA_BULLION_PREMIUM;
+    out.silver = {
+      ...out.silver,
+      price: Math.round(inrPerKg),
+      change: Math.round(inrPerKg - prevInrPerKg),
+      changePercent: out.silver.changePercent,
+      displayValue: `₹${Math.round(inrPerKg).toLocaleString("en-IN")}`,
+    };
+  }
+
+  // Format display values for the remaining fields.
+  if (out.nifty50) out.nifty50.displayValue = formatIndex(out.nifty50.price);
+  if (out.sensex) out.sensex.displayValue = formatIndex(out.sensex.price);
+  if (out.bankNifty) out.bankNifty.displayValue = formatIndex(out.bankNifty.price);
+  if (out.indiaVix) out.indiaVix.displayValue = out.indiaVix.price.toFixed(2);
+  if (out.usdInr) out.usdInr.displayValue = out.usdInr.price.toFixed(2);
+  if (out.brent) out.brent.displayValue = `$${out.brent.price.toFixed(2)}`;
+  if (out.wti) out.wti.displayValue = `$${out.wti.price.toFixed(2)}`;
+
+  const result = {
+    updatedAt: new Date().toISOString(),
+    market: out,
+    errors: errors.length ? errors : undefined,
+  };
+
+  // If literally everything failed and we have an older cache, prefer
+  // returning the stale cache over an all-null payload.
+  const allNull = Object.values(out).every((v) => v === null);
+  if (allNull && cache.data) {
+    return { ...cache.data, stale: true, errors };
+  }
+
+  cache = { data: result, timestamp: now };
+  return result;
 }
 
-/**
- * Public init function called from app.js once the DOM is ready.
- * (The "Live Data · <date>" label is handled separately by app.js's
- * renderCurrentDates(), which runs before this is called.)
- */
-export function initMarketModule() {
-  setAllCardsLoading();
-  refreshMarketData();
-  setInterval(refreshMarketData, MARKET_REFRESH_MS);
+function formatIndex(n) {
+  return Math.round(n).toLocaleString("en-IN");
+}
+
+// -----------------------------------------------------------------------------
+// Vercel Serverless Function handler
+// -----------------------------------------------------------------------------
+export default async function handler(req, res) {
+  // Only GET is supported.
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  try {
+    const data = await getMarketData();
+
+    // HTTP-level caching: allow Vercel's Edge Network and browsers to
+    // cache for 5 minutes, while serving a stale copy for up to 60s
+    // longer while a fresh one is fetched in the background.
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=300, stale-while-revalidate=60"
+    );
+    res.setHeader("Content-Type", "application/json");
+    return res.status(200).json(data);
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to fetch market data",
+      message: err.message,
+    });
+  }
 }
