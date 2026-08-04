@@ -621,18 +621,15 @@ Not a SEBI-registered advisor. Content is for educational purposes only.</p>
     <!--
       #timeline-list: populated live by js/timeline.js from /api/timeline,
       which derives items from /api/news + /api/market (no new API keys,
-      no extra quota — see api/timeline.js). The six items below are the
-      static / pre-JS fallback, exactly like the market cards' static
-      figures — js/timeline.js only overwrites them once fresh data
-      actually arrives, so nothing is ever left blank.
+      no extra quota — see api/timeline.js). The placeholder below is an
+      honest "loading" skeleton, NOT sample real-looking news — unlike the
+      market cards (which show plausible-but-generic numbers while
+      loading), fabricated-sounding headlines/prices here could be
+      mistaken for real reporting if JS ever fails to replace them, so we
+      never show specific invented events or figures in this fallback.
     -->
     <div class="timeline" id="timeline-list">
-      <div class="tl-item"><div class="tl-time">09:15</div><div class="tl-dot pos"></div><div class="tl-content"><span class="tl-badge badge-pos">Bullish</span><p>Markets open higher; Nifty above 24,800. SIP flows continue strong at open.</p></div></div>
-      <div class="tl-item"><div class="tl-time">10:30</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">RBI</span><p>RBI opens term money market to AIFIs and HFCs; prudential borrowing limits raised for primary dealers.</p></div></div>
-      <div class="tl-item"><div class="tl-time">11:45</div><div class="tl-dot pos"></div><div class="tl-content"><span class="tl-badge badge-pos">Stocks</span><p>NIACL surges ~30% after NSE IPO prospectus reveals NIACL as selling shareholder.</p></div></div>
-      <div class="tl-item"><div class="tl-time">13:00</div><div class="tl-dot warn"></div><div class="tl-content"><span class="tl-badge badge-warn">Global</span><p>Micron earnings beat expectations; Nasdaq futures surge 2.2%. AI capex concerns ease significantly.</p></div></div>
-      <div class="tl-item"><div class="tl-time">14:15</div><div class="tl-dot neg"></div><div class="tl-content"><span class="tl-badge badge-neg">Crude</span><p>Brent falls to $72.42, WTI to $68.95 — both hitting 4-month lows. Positive macro tailwind for India.</p></div></div>
-      <div class="tl-item"><div class="tl-time">15:30</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">IPO</span><p>Adon Agro Commodities IPO details unveiled: ₹44.03 Cr issue, opens June 29 on BSE SME platform.</p></div></div>
+      <div class="tl-item tl-placeholder"><div class="tl-time">--:--</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">Loading</span><p>Fetching today's market timeline&hellip;</p></div></div>
     </div>
   </div>
 </section>
