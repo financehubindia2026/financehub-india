@@ -71,7 +71,7 @@
         "description": "SIP Resilience, RBI's Deepening Markets & Global Tech Surge — today's Indian market update.",
         "author": {
           "@type": "Person",
-          "name": "Financehub India"
+          "name": "FinanceHub India"
         },
         "publisher": {
           "@type": "Organization",
@@ -151,6 +151,8 @@
     <nav class="main-nav" id="main-nav" aria-label="Primary navigation">
       <ul>
         <li><a href="#" class="active" aria-current="page">Home</a></li>
+        <li><a href="#market-update">Market Update</a></li>
+        <li><a href="#market-news">News</a></li>
         <li><a href="#articles">Guides</a></li>
         <li><a href="#calculators">Calculators</a></li>
         <li><a href="#quiz">Quiz</a></li>
@@ -191,7 +193,119 @@
           <polyline points="0,60 40,50 70,54 100,30 130,36 170,18 210,12 260,8" fill="none" stroke="#0f7de5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           <defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0f7de5"/><stop offset="100%" stop-color="#0f7de5" stop-opacity="0"/></linearGradient></defs>
         </svg>
+        <!-- Filled live by js/market.js · renderHeroMiniTickers(). Server-
+             rendered placeholders below are replaced within ~1s of load
+             and act as the no-JS fallback / first-paint content. -->
+        <div class="mini-tickers" id="hero-mini-tickers" aria-live="polite" aria-label="Live market mini ticker">
+          <div class="mini-tick"><span>Nifty 50</span><span class="val skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+          <div class="mini-tick"><span>Sensex</span><span class="val skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+          <div class="mini-tick"><span>Bank Nifty</span><span class="val skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+          <div class="mini-tick"><span>USD/INR</span><span class="val skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+          <div class="mini-tick"><span>Gold ₹/10g</span><span class="val skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TICKER STRIP -->
+<div class="ticker-strip" aria-hidden="true"><div class="ticker-track" id="ticker-track"></div></div>
+
+<!-- MARKET CARDS -->
+<section class="market-section" id="market-update" aria-labelledby="market-update-heading">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:4px">
+      <div>
+        <div style="margin-bottom:4px">
+          <span class="section-eyebrow"><span class="live-pulse" aria-hidden="true"></span>Live Data · <span data-current-date>June 26, 2026</span></span>
+          <span class="data-updated-at" id="market-updated-at"></span>
+        </div>
+        <h2 class="section-title" id="market-update-heading">Today's Market Snapshot</h2>
+      </div>
+      <span style="display:inline-flex;align-items:center;gap:6px;background:var(--green-l);color:var(--green);font-size:.75rem;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid var(--green);">🟢 Bullish Sentiment</span>
+    </div>
+
+    <!-- Shown only if /api/market fails entirely on first load (see js/market.js) -->
+    <div class="error-card" id="market-error-banner" style="display:none;margin-top:16px" role="alert">
+      <span class="icon" aria-hidden="true">⚠️</span>
+      <div>
+        <p data-field="message">Couldn't load live market data right now.</p>
+        <button class="retry-btn" onclick="location.reload()">Retry</button>
+      </div>
+    </div>
+
+    <!--
+      Each card below is wired for live data via data-market / data-field
+      attributes, read by js/market.js. data-state controls which content
+      shows: "loading" (skeleton), "loaded" (real value), or "error"
+      (per-card error note) — see the CSS rules under
+      "LIVE DATA ENHANCEMENTS" in css/style.css. The static figures left
+      in each .c-val / .c-chg act as the no-JS / pre-hydration fallback.
+    -->
+    <div class="market-cards">
+      <div class="market-card pos" data-market="nifty50" data-state="loading">
+        <div class="c-label">Nifty 50</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">24,852</div>
+        <div class="c-chg pos" data-field="change">▲ +187.40 (+0.76%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,20 13,16 26,18 39,10 52,12 65,6 80,4" fill="none" stroke="#0dab76" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card pos" data-market="sensex" data-state="loading">
+        <div class="c-label">Sensex</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">81,643</div>
+        <div class="c-chg pos" data-field="change">▲ +612.30 (+0.76%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,20 13,15 26,17 39,9 52,11 65,5 80,3" fill="none" stroke="#0dab76" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card pos" data-market="bankNifty" data-state="loading">
+        <div class="c-label">Bank Nifty</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">52,480</div>
+        <div class="c-chg pos" data-field="change">▲ +310.60 (+0.60%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,18 13,14 26,16 39,12 52,10 65,8 80,6" fill="none" stroke="#0dab76" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card neg" data-market="indiaVix" data-state="loading">
+        <div class="c-label">India VIX</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">13.42</div>
+        <div class="c-chg neg" data-field="change">▼ −0.85 (−5.96%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,4 13,8 26,6 39,14 52,12 65,18 80,20" fill="none" stroke="#e53935" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card neg" data-market="usdInr" data-state="loading">
+        <div class="c-label">USD/INR</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">83.72</div>
+        <div class="c-chg neg" data-field="change">▲ +0.18 (+0.22%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,12 13,14 26,10 39,16 52,13 65,17 80,19" fill="none" stroke="#f0a500" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card pos" data-market="gold" data-state="loading">
+        <div class="c-label">Gold ₹/10g</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">72,450</div>
+        <div class="c-chg pos" data-field="change">▲ +320 (+0.44%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,18 13,15 26,12 39,10 52,8 65,6 80,4" fill="none" stroke="#f0a500" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card neg" data-market="brent" data-state="loading">
+        <div class="c-label">Brent Crude</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">$72.42</div>
+        <div class="c-chg neg" data-field="change">▼ −1.45 (−1.96%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,4 13,7 26,10 39,12 52,16 65,18 80,20" fill="none" stroke="#e53935" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
+      </div>
+      <div class="market-card neg" data-market="wti" data-state="loading">
+        <div class="c-label">WTI Crude</div>
+        <span class="card-skel"><span class="skel-line h-val skeleton"></span><span class="skel-line w-60 skeleton"></span></span>
+        <div class="c-val" data-field="value">$68.95</div>
+        <div class="c-chg neg" data-field="change">▼ −1.40 (−1.99%)</div>
+        <div class="sparkline" data-field="sparkline"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="0,4 13,7 26,11 39,14 52,17 65,19 80,21" fill="none" stroke="#e53935" stroke-width="2"/></svg></div>
+        <div class="card-error">Unavailable</div>
       </div>
     </div>
   </div>
@@ -440,7 +554,41 @@ Not a SEBI-registered advisor. Content is for educational purposes only.</p>
               <span class="sidebar-item-text">
                 <span class="sidebar-item-title">FD Calculator</span>
                 
-              </span>           
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="sidebar-item-arrow"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#calculators" class="sidebar-item-link">
+              <span class="sidebar-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>
+              <span class="sidebar-item-text">
+                <span class="sidebar-item-title">CAGR Calculator</span>
+                <span class="sidebar-item-badge">Soon</span>
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="sidebar-item-arrow"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#calculators" class="sidebar-item-link">
+              <span class="sidebar-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+              <span class="sidebar-item-text">
+                <span class="sidebar-item-title">Loan Calculator</span>
+                <span class="sidebar-item-badge">Soon</span>
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="sidebar-item-arrow"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </li>
+          <li>
+            <a href="#calculators" class="sidebar-item-link">
+              <span class="sidebar-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span>
+              <span class="sidebar-item-text">
+                <span class="sidebar-item-title">GST Calculator</span>
+                <span class="sidebar-item-badge">Soon</span>
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="sidebar-item-arrow"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </li>
+            </ul>
           </nav>
         </div>
 
@@ -452,6 +600,102 @@ Not a SEBI-registered advisor. Content is for educational purposes only.</p>
         </div>
     <!-- AUTO:HOME_SIDEBAR_END -->
       </aside>
+    </div>
+  </div>
+</section>
+
+<!-- TIMELINE -->
+<section class="timeline-section">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:4px">
+      <div>
+        <span class="section-eyebrow"><span class="live-pulse" aria-hidden="true"></span>Today's Chronology</span>
+        <span class="data-updated-at" id="timeline-updated-at"></span>
+      </div>
+    </div>
+    <h2 class="section-title">Market Timeline</h2>
+    <!-- Auto-generated one-line pulse from live index data + the latest
+         headline (see js/timeline.js). Hidden until real data arrives. -->
+    <p class="section-desc" id="market-pulse" style="display:none;margin-top:4px"></p>
+
+    <!--
+      #timeline-list: populated live by js/timeline.js from /api/timeline,
+      which derives items from /api/news + /api/market (no new API keys,
+      no extra quota — see api/timeline.js). The six items below are the
+      static / pre-JS fallback, exactly like the market cards' static
+      figures — js/timeline.js only overwrites them once fresh data
+      actually arrives, so nothing is ever left blank.
+    -->
+    <div class="timeline" id="timeline-list">
+      <div class="tl-item"><div class="tl-time">09:15</div><div class="tl-dot pos"></div><div class="tl-content"><span class="tl-badge badge-pos">Bullish</span><p>Markets open higher; Nifty above 24,800. SIP flows continue strong at open.</p></div></div>
+      <div class="tl-item"><div class="tl-time">10:30</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">RBI</span><p>RBI opens term money market to AIFIs and HFCs; prudential borrowing limits raised for primary dealers.</p></div></div>
+      <div class="tl-item"><div class="tl-time">11:45</div><div class="tl-dot pos"></div><div class="tl-content"><span class="tl-badge badge-pos">Stocks</span><p>NIACL surges ~30% after NSE IPO prospectus reveals NIACL as selling shareholder.</p></div></div>
+      <div class="tl-item"><div class="tl-time">13:00</div><div class="tl-dot warn"></div><div class="tl-content"><span class="tl-badge badge-warn">Global</span><p>Micron earnings beat expectations; Nasdaq futures surge 2.2%. AI capex concerns ease significantly.</p></div></div>
+      <div class="tl-item"><div class="tl-time">14:15</div><div class="tl-dot neg"></div><div class="tl-content"><span class="tl-badge badge-neg">Crude</span><p>Brent falls to $72.42, WTI to $68.95 — both hitting 4-month lows. Positive macro tailwind for India.</p></div></div>
+      <div class="tl-item"><div class="tl-time">15:30</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">IPO</span><p>Adon Agro Commodities IPO details unveiled: ₹44.03 Cr issue, opens June 29 on BSE SME platform.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================================
+     LIVE MARKET NEWS
+     New section. Populated entirely by js/news.js from /api/news, which
+     itself tries GNews → NewsAPI → Finnhub in order (see api/news.js for
+     the fallback chain). Covers Indian market news, RBI news, IPO news,
+     mutual fund news, stock market news, and global market news via the
+     category pills below. Refreshes automatically every 15 minutes.
+===================================================================== -->
+<section class="news-section" id="market-news" aria-labelledby="market-news-heading">
+  <div class="container">
+    <div class="news-head-row">
+      <div>
+        <div style="margin-bottom:4px"><span class="section-eyebrow"><span class="live-pulse" aria-hidden="true"></span>Live Market News</span></div>
+        <h2 class="section-title" id="market-news-heading">Latest Financial News</h2>
+        <p class="section-desc">Indian markets, RBI, IPOs, mutual funds &amp; global cues — updated automatically.</p>
+      </div>
+      <span class="news-refresh-note" id="news-updated-at"></span>
+    </div>
+
+    <!-- Category filter pills -->
+    <div class="news-category-pills" role="tablist" aria-label="Filter news by category">
+      <button class="news-pill active" data-category="all" role="tab" aria-selected="true">All News</button>
+      <button class="news-pill" data-category="india" role="tab" aria-selected="false">Indian Markets</button>
+      <button class="news-pill" data-category="rbi" role="tab" aria-selected="false">RBI</button>
+      <button class="news-pill" data-category="ipo" role="tab" aria-selected="false">IPO</button>
+      <button class="news-pill" data-category="mutualfunds" role="tab" aria-selected="false">Mutual Funds</button>
+      <button class="news-pill" data-category="global" role="tab" aria-selected="false">Global Markets</button>
+    </div>
+
+    <!-- Shown only if every news provider fails -->
+    <div class="error-card" id="news-error-banner" style="display:none;margin-top:16px" role="alert">
+      <span class="icon" aria-hidden="true">⚠️</span>
+      <div>
+        <p data-field="message">Couldn't load live news right now.</p>
+        <button class="retry-btn" onclick="location.reload()">Retry</button>
+      </div>
+    </div>
+
+    <!-- Featured headline (large card) + top-3 side list -->
+    <div class="news-featured">
+      <div class="news-featured-card" id="news-featured-card" aria-live="polite">
+        <div class="news-img skeleton"></div>
+        <div class="news-body">
+          <span class="skel-line w-80 skeleton"></span>
+          <span class="skel-line w-60 skeleton"></span>
+        </div>
+      </div>
+      <div class="news-side-list" id="news-side-list" aria-live="polite">
+        <div class="news-side-item"><div class="news-side-img skeleton"></div><div class="news-side-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-40 skeleton"></span></div></div>
+        <div class="news-side-item"><div class="news-side-img skeleton"></div><div class="news-side-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-40 skeleton"></span></div></div>
+        <div class="news-side-item"><div class="news-side-img skeleton"></div><div class="news-side-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-40 skeleton"></span></div></div>
+      </div>
+    </div>
+
+    <!-- Remaining stories to complete the top-10 -->
+    <div class="news-grid" id="news-grid" aria-live="polite">
+      <div class="news-skel-card"><div class="news-img skeleton"></div><div class="news-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-60 skeleton"></span></div></div>
+      <div class="news-skel-card"><div class="news-img skeleton"></div><div class="news-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-60 skeleton"></span></div></div>
+      <div class="news-skel-card"><div class="news-img skeleton"></div><div class="news-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-60 skeleton"></span></div></div>
     </div>
   </div>
 </section>
@@ -598,7 +842,7 @@ Not a SEBI-registered advisor. Content is for educational purposes only.</p>
           <div class="author-avatar">KKR</div>
           <div class="author-info">
             <div class="eyebrow">Founder &amp; Editor</div>
-            <strong style="display:block;font-size:1.05rem;margin:4px 0 8px">Financehub India</strong>
+            <strong style="display:block;font-size:1.05rem;margin:4px 0 8px">FinanceHub India</strong>
             <p>A 20 year old stock market enthusiast passionate about investing and personal finance. He shares insights to help others build financial literacy — not as advice, but as learning shared along the way. Not a SEBI-registered advisor. Content is for educational purposes only.</p>
           </div>
         </div>
