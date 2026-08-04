@@ -604,36 +604,6 @@ Not a SEBI-registered advisor. Content is for educational purposes only.</p>
   </div>
 </section>
 
-<!-- TIMELINE -->
-<section class="timeline-section">
-  <div class="container">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:4px">
-      <div>
-        <span class="section-eyebrow"><span class="live-pulse" aria-hidden="true"></span>Today's Chronology</span>
-        <span class="data-updated-at" id="timeline-updated-at"></span>
-      </div>
-    </div>
-    <h2 class="section-title">Market Timeline</h2>
-    <!-- Auto-generated one-line pulse from live index data + the latest
-         headline (see js/timeline.js). Hidden until real data arrives. -->
-    <p class="section-desc" id="market-pulse" style="display:none;margin-top:4px"></p>
-
-    <!--
-      #timeline-list: populated live by js/timeline.js from /api/timeline,
-      which derives items from /api/news + /api/market (no new API keys,
-      no extra quota — see api/timeline.js). The placeholder below is an
-      honest "loading" skeleton, NOT sample real-looking news — unlike the
-      market cards (which show plausible-but-generic numbers while
-      loading), fabricated-sounding headlines/prices here could be
-      mistaken for real reporting if JS ever fails to replace them, so we
-      never show specific invented events or figures in this fallback.
-    -->
-    <div class="timeline" id="timeline-list">
-      <div class="tl-item tl-placeholder"><div class="tl-time">--:--</div><div class="tl-dot info"></div><div class="tl-content"><span class="tl-badge badge-info">Loading</span><p>Fetching today's market timeline&hellip;</p></div></div>
-    </div>
-  </div>
-</section>
-
 <!-- =====================================================================
      LIVE MARKET NEWS
      New section. Populated entirely by js/news.js from /api/news, which
