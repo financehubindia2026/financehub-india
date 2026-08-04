@@ -82,9 +82,18 @@ async function refreshTimeline() {
     if (!res.ok) throw new Error(`Server responded ${res.status}`);
     const json = await res.json();
 
+    // Only claim an "Updated <time>" freshness label once we actually
+    // have real timeline items to show. Previously this ran regardless,
+    // so a successful-but-empty API response could stamp a fresh
+    // timestamp next to the old placeholder content — implying live data
+    // when nothing had actually changed on screen.
+    const hasItems = Array.isArray(json.timeline) && json.timeline.length > 0;
+
     renderTimeline(json.timeline);
     renderMarketPulse(json.marketPulse);
-    renderTimelineUpdatedAt(json.updatedAt);
+    if (hasItems) {
+      renderTimelineUpdatedAt(json.updatedAt);
+    }
   } catch (err) {
     console.error("[timeline.js] refresh failed:", err);
     // Intentionally no fallback UI change — the static timeline already
