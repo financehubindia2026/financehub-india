@@ -75,6 +75,17 @@ const DISPLAY_META = {
 // readers expect. 1 troy ounce = 31.1035 grams.
 const OUNCE_TO_GRAM = 31.1035;
 
+// Raw international spot gold/silver prices, converted 1:1 via the
+// exchange rate, run well below what Indian buyers actually see quoted
+// (MCX, jewellers, gold-buying apps). That's because Indian prices bake
+// in customs/import duty (~6%), GST (3%), and a local market premium on
+// top of the international spot price. This factor approximates that
+// gap so our displayed number tracks what readers will see elsewhere in
+// India, rather than a theoretical "if there were no duty/tax" figure.
+// It's a static approximation, not a live duty/GST feed — revisit if
+// India's import duty on gold changes.
+const INDIA_BULLION_PREMIUM = 1.13; // ~13%, duty + GST + local premium
+
 /**
  * Fetches a single quote from Yahoo Finance's public (keyless) CHART
  * endpoint (v8). We use this instead of the older v7 "quote" batch
@@ -309,11 +320,12 @@ async function getMarketData() {
   const usdInrRate = out.usdInr?.price || 86; // sane static fallback if both sources fail
   if (out.gold && out.gold.raw) {
     const usdPerGram = out.gold.price / OUNCE_TO_GRAM;
-    const inrPer10g = usdPerGram * usdInrRate * 10;
+    const inrPer10g = usdPerGram * usdInrRate * 10 * INDIA_BULLION_PREMIUM;
     const prevInrPer10g =
       ((out.gold.previousClose || out.gold.price - out.gold.change) / OUNCE_TO_GRAM) *
       usdInrRate *
-      10;
+      10 *
+      INDIA_BULLION_PREMIUM;
     out.gold = {
       ...out.gold,
       price: Math.round(inrPer10g),
@@ -324,12 +336,13 @@ async function getMarketData() {
   }
   if (out.silver && out.silver.raw) {
     const usdPerGram = out.silver.price / OUNCE_TO_GRAM;
-    const inrPerKg = usdPerGram * usdInrRate * 1000;
+    const inrPerKg = usdPerGram * usdInrRate * 1000 * INDIA_BULLION_PREMIUM;
     const prevInrPerKg =
       ((out.silver.previousClose || out.silver.price - out.silver.change) /
         OUNCE_TO_GRAM) *
       usdInrRate *
-      1000;
+      1000 *
+      INDIA_BULLION_PREMIUM;
     out.silver = {
       ...out.silver,
       price: Math.round(inrPerKg),
