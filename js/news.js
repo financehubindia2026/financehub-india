@@ -1,252 +1,272 @@
 // =============================================================================
-// js/news.js
+// /api/news.js
 // -----------------------------------------------------------------------------
-// MODULE: Live market news.
-// Responsible for:
-//   - Fetching /api/news on page load and every 15 minutes
-//   - Rendering: featured headline, top 10 latest news, image, source,
-//     published time, and a "Read More" button for each story
-//   - Category pill filtering (India / RBI / IPO / Mutual Funds / Global)
-//   - Skeleton loading state on first load, error card on total failure
+// Vercel Serverless Function (Node.js runtime).
+// Fetches LIVE Indian + global financial news covering:
+//   Indian market news, RBI news, IPO news, mutual fund news,
+//   stock market news, and global market news.
+//
+// DATA SOURCES (free tier, in priority order with automatic fallback):
+//   1. GNews          (https://gnews.io)        — free: 100 requests/day
+//   2. NewsAPI.org     (https://newsapi.org)     — free: 100 requests/day (dev use)
+//   3. Finnhub         (https://finnhub.io)      — free: 60 calls/minute, has a
+//                                                  dedicated /news endpoint for
+//                                                  general market news (used as
+//                                                  a topical fallback, not for
+//                                                  India-specific keyword search)
+//
+// Each provider is tried in order; if one fails (missing key, rate-limited,
+// network error, or empty results) the next one is tried automatically.
+// Alpha Vantage and Twelve Data do not offer a general news-search endpoint
+// suitable for keyword queries like "RBI" or "IPO India" on the free tier,
+// so they are intentionally not used for this endpoint (Twelve Data is
+// instead used in api/market.js for price fallback).
+//
+// CACHING:
+//   Responses are cached in-memory for 10 minutes (news changes slower
+//   than prices) plus standard HTTP cache headers. A once-daily Vercel
+//   Cron Job (see vercel.json) pre-warms this cache — Vercel's Hobby
+//   plan caps cron at once per day, so ongoing freshness throughout the
+//   day comes from every visitor's browser re-requesting this endpoint
+//   every 15 minutes (see js/news.js), with the 10-minute server cache
+//   absorbing repeat requests in between.
+//
+// SECURITY:
+//   API keys (GNEWS_API_KEY, NEWSAPI_KEY, FINNHUB_API_KEY) are read only
+//   from server-side environment variables and are NEVER included in the
+//   JSON sent to the browser.
 // =============================================================================
 
-const NEWS_REFRESH_MS = 15 * 60 * 1000; // 15 minutes, per spec
-let currentCategory = "all";
-let newsRefreshTimer = null;
+let cache = {
+  data: null,
+  timestamp: 0,
+};
+
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+// Search query covering the categories requested: Indian market news,
+// RBI news, IPO news, mutual fund news, stock market news, global market news.
+const SEARCH_QUERY =
+  '("Indian stock market" OR Sensex OR Nifty OR RBI OR "IPO India" OR "mutual fund" India OR "global markets")';
+
+const CATEGORY_QUERIES = {
+  all: SEARCH_QUERY,
+  india: '("Indian stock market" OR Sensex OR Nifty)',
+  rbi: '(RBI OR "Reserve Bank of India" OR "monetary policy" India)',
+  ipo: '("IPO India" OR "initial public offering" India)',
+  mutualfunds: '("mutual fund" India OR SIP OR AMFI)',
+  global: '("global markets" OR "Wall Street" OR "Fed rate" OR "Asian markets")',
+};
 
 /**
- * Converts an ISO timestamp into a friendly "x minutes/hours ago" string,
- * falling back to a readable date for older articles.
+ * Provider 1: GNews — https://gnews.io/docs/v4
  */
-function timeAgo(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
+async function fetchFromGNews(query) {
+  const apiKey = process.env.GNEWS_API_KEY;
+  if (!apiKey) throw new Error("GNEWS_API_KEY not configured");
 
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
+  const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
+    query
+  )}&lang=en&country=in&max=10&sortby=publishedAt&apikey=${apiKey}`;
 
-/** Escapes basic HTML special characters to avoid markup injection from feeds. */
-function escapeHtml(str) {
-  if (!str) return "";
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/**
- * Renders the single large "featured headline" card.
- */
-function renderFeatured(article) {
-  const el = document.getElementById("news-featured-card");
-  if (!el) return;
-
-  if (!article) {
-    el.innerHTML = `<div class="news-img skeleton"></div><div class="news-body"><span class="skel-line w-60 skeleton"></span><span class="skel-line w-80 skeleton"></span></div>`;
-    return;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GNews status ${res.status}: ${body.slice(0, 120)}`);
+  }
+  const json = await res.json();
+  if (!Array.isArray(json.articles) || json.articles.length === 0) {
+    throw new Error("GNews returned no articles");
   }
 
-  const img = article.image
-    ? `<img src="${escapeHtml(article.image)}" alt="${escapeHtml(
-        article.title
-      )}" loading="lazy" width="600" height="200" />`
-    : "";
-
-  el.innerHTML = `
-    <div class="news-img">
-      ${img}
-      <span class="news-tag">Featured</span>
-    </div>
-    <div class="news-body">
-      <h3><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
-    article.title
-  )}</a></h3>
-      <div class="news-meta">
-        <span class="src">${escapeHtml(article.source)}</span>
-        <span aria-hidden="true">·</span>
-        <span>${timeAgo(article.publishedAt)}</span>
-      </div>
-      <p>${escapeHtml(article.description || "")}</p>
-      <a class="news-readmore" href="${escapeHtml(
-        article.url
-      )}" target="_blank" rel="noopener noreferrer">Read More →</a>
-    </div>
-  `;
+  return json.articles.map((a) => ({
+    title: a.title,
+    description: a.description,
+    url: a.url,
+    image: a.image || null,
+    source: a.source?.name || "GNews",
+    publishedAt: a.publishedAt,
+  }));
 }
 
 /**
- * Renders the compact side list of stories (used next to the featured card).
+ * Provider 2 (fallback): NewsAPI.org — https://newsapi.org/docs
  */
-function renderSideList(articles) {
-  const el = document.getElementById("news-side-list");
-  if (!el) return;
+async function fetchFromNewsAPI(query) {
+  const apiKey = process.env.NEWSAPI_KEY;
+  if (!apiKey) throw new Error("NEWSAPI_KEY not configured");
 
-  if (!articles || articles.length === 0) {
-    el.innerHTML = Array.from({ length: 3 })
-      .map(
-        () =>
-          `<div class="news-side-item"><div class="news-side-img skeleton"></div><div class="news-side-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-40 skeleton"></span></div></div>`
-      )
-      .join("");
-    return;
+  const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
+    query
+  )}&language=en&sortBy=publishedAt&pageSize=10&apiKey=${apiKey}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`NewsAPI status ${res.status}: ${body.slice(0, 120)}`);
+  }
+  const json = await res.json();
+  if (!Array.isArray(json.articles) || json.articles.length === 0) {
+    throw new Error("NewsAPI returned no articles");
   }
 
-  el.innerHTML = articles
-    .slice(0, 3)
-    .map((a) => {
-      const img = a.image
-        ? `<img src="${escapeHtml(a.image)}" alt="${escapeHtml(a.title)}" loading="lazy" width="64" height="64" />`
-        : "📰";
-      return `
-        <div class="news-side-item">
-          <div class="news-side-img">${img}</div>
-          <div class="news-side-body">
-            <h4><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
-        a.title
-      )}</a></h4>
-            <div class="news-side-meta">${escapeHtml(a.source)} · ${timeAgo(a.publishedAt)}</div>
-          </div>
-        </div>`;
-    })
-    .join("");
+  return json.articles.map((a) => ({
+    title: a.title,
+    description: a.description,
+    url: a.url,
+    image: a.urlToImage || null,
+    source: a.source?.name || "NewsAPI",
+    publishedAt: a.publishedAt,
+  }));
 }
 
 /**
- * Renders the remaining grid of news cards (rest of the top 10).
+ * Provider 3 (fallback): Finnhub general market news —
+ * https://finnhub.io/docs/api/market-news
+ * Note: Finnhub's free news endpoint is topical (general/forex/crypto/merger)
+ * rather than keyword-searchable, so it's used as a last-resort fallback to
+ * ensure the news section is never empty, rather than for category filtering.
  */
-function renderNewsGrid(articles) {
-  const el = document.getElementById("news-grid");
-  if (!el) return;
+async function fetchFromFinnhub() {
+  const apiKey = process.env.FINNHUB_API_KEY;
+  if (!apiKey) throw new Error("FINNHUB_API_KEY not configured");
 
-  if (!articles || articles.length === 0) {
-    el.innerHTML = Array.from({ length: 6 })
-      .map(
-        () =>
-          `<div class="news-skel-card"><div class="news-img skeleton"></div><div class="news-body"><span class="skel-line w-80 skeleton"></span><span class="skel-line w-60 skeleton"></span></div></div>`
-      )
-      .join("");
-    return;
+  const url = `https://finnhub.io/api/v1/news?category=general&token=${apiKey}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Finnhub status ${res.status}: ${body.slice(0, 120)}`);
+  }
+  const json = await res.json();
+  if (!Array.isArray(json) || json.length === 0) {
+    throw new Error("Finnhub returned no articles");
   }
 
-  el.innerHTML = articles
-    .map((a) => {
-      const img = a.image
-        ? `<img src="${escapeHtml(a.image)}" alt="${escapeHtml(a.title)}" loading="lazy" width="260" height="140" />`
-        : "";
-      return `
-        <div class="news-card">
-          <div class="news-img">${img}</div>
-          <div class="news-body">
-            <h3><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
-        a.title
-      )}</a></h3>
-            <div class="news-meta">
-              <span class="src">${escapeHtml(a.source)}</span>
-              <span aria-hidden="true">·</span>
-              <span>${timeAgo(a.publishedAt)}</span>
-            </div>
-            <p>${escapeHtml(a.description || "")}</p>
-            <a class="news-readmore" href="${escapeHtml(
-              a.url
-            )}" target="_blank" rel="noopener noreferrer">Read More →</a>
-          </div>
-        </div>`;
-    })
-    .join("");
-}
-
-function showNewsError(message) {
-  const el = document.getElementById("news-error-banner");
-  if (!el) return;
-  el.style.display = "flex";
-  el.querySelector("[data-field='message']").textContent =
-    message || "Live news is temporarily unavailable.";
-}
-
-function hideNewsError() {
-  const el = document.getElementById("news-error-banner");
-  if (el) el.style.display = "none";
-}
-
-function renderNewsUpdatedAt(iso) {
-  const el = document.getElementById("news-updated-at");
-  if (!el || !iso) return;
-  const d = new Date(iso);
-  el.textContent = `Updated ${d.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  return json.slice(0, 10).map((a) => ({
+    title: a.headline,
+    description: a.summary,
+    url: a.url,
+    image: a.image || null,
+    source: a.source || "Finnhub",
+    publishedAt: a.datetime
+      ? new Date(a.datetime * 1000).toISOString()
+      : new Date().toISOString(),
+  }));
 }
 
 /**
- * Main fetch + render cycle for the news section.
+ * Tries each provider in order until one succeeds. Returns both the
+ * articles and which provider ultimately served them (useful for
+ * debugging / transparency, stripped from the public response if desired).
  */
-async function refreshNews(category = currentCategory) {
-  try {
-    const res = await fetch(`/api/news?category=${encodeURIComponent(category)}`);
-    if (!res.ok) throw new Error(`Server responded ${res.status}`);
-    const json = await res.json();
+async function fetchNewsWithFallback(category) {
+  const query = CATEGORY_QUERIES[category] || CATEGORY_QUERIES.all;
+  const attempts = [];
 
-    if (!json.allArticles) throw new Error("Malformed news response");
-
-    hideNewsError();
-    renderFeatured(json.featured);
-    renderSideList(json.articles);
-    // Grid shows articles 4-10 (the side list already covers 2-3, featured covers 1).
-    renderNewsGrid(json.articles.slice(2, 9));
-    renderNewsUpdatedAt(json.updatedAt);
-  } catch (err) {
-    console.error("[news.js] refresh failed:", err);
-    const el = document.getElementById("news-featured-card");
-    const alreadyHasContent = el && el.querySelector("h3");
-    if (!alreadyHasContent) {
-      showNewsError(
-        "Couldn't load live news right now. We'll keep trying automatically."
-      );
+  for (const [name, fn] of [
+    ["gnews", () => fetchFromGNews(query)],
+    ["newsapi", () => fetchFromNewsAPI(query)],
+    ["finnhub", () => fetchFromFinnhub()],
+  ]) {
+    try {
+      const articles = await fn();
+      return { provider: name, articles, attempts };
+    } catch (err) {
+      attempts.push(`${name}: ${err.message}`);
     }
   }
+
+  throw new Error(
+    `All news providers failed. Attempts: ${attempts.join(" | ")}`
+  );
 }
 
 /**
- * Wires up the category filter pills (India / RBI / IPO / Mutual Funds / Global).
+ * Deduplicates articles by title (different providers sometimes carry
+ * the same wire story) and trims to a max count.
  */
-function initCategoryPills() {
-  const pills = document.querySelectorAll(".news-pill");
-  pills.forEach((pill) => {
-    pill.addEventListener("click", () => {
-      pills.forEach((p) => {
-        p.classList.remove("active");
-        p.setAttribute("aria-selected", "false");
-      });
-      pill.classList.add("active");
-      pill.setAttribute("aria-selected", "true");
-      currentCategory = pill.dataset.category || "all";
+function dedupeAndTrim(articles, max = 10) {
+  const seen = new Set();
+  const out = [];
+  for (const a of articles) {
+    const normalizedTitle = (a.title || "").trim().toLowerCase();
+    if (!normalizedTitle || seen.has(normalizedTitle)) continue;
+    seen.add(normalizedTitle);
+    out.push(a);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 
-      // Show skeletons immediately for snappy feedback while refetching.
-      renderFeatured(null);
-      renderSideList(null);
-      renderNewsGrid(null);
-      refreshNews(currentCategory);
+// Exported so api/timeline.js can call this directly (in-process) instead
+// of making an HTTP request back to this same deployment — self-fetches
+// via process.env.VERCEL_URL hit Vercel's automatic protection on raw
+// deployment URLs and fail with an HTML auth-challenge response. A direct
+// function call sidesteps that entirely, and is faster besides.
+export async function getNewsData(category) {
+  const now = Date.now();
+  const cacheKey = category || "all";
+
+  if (
+    cache.data &&
+    cache.data._cacheKey === cacheKey &&
+    now - cache.timestamp < CACHE_TTL_MS
+  ) {
+    return { ...cache.data, fromCache: true };
+  }
+
+  try {
+    const { provider, articles } = await fetchNewsWithFallback(cacheKey);
+    const cleaned = dedupeAndTrim(articles, 10);
+
+    const result = {
+      updatedAt: new Date().toISOString(),
+      provider,
+      featured: cleaned[0] || null,
+      articles: cleaned.slice(1),
+      allArticles: cleaned, // convenience: full top-10 including featured
+      _cacheKey: cacheKey,
+    };
+
+    cache = { data: result, timestamp: now };
+    return result;
+  } catch (err) {
+    // If every provider failed, serve a stale cache rather than an error
+    // page, if one exists — graceful degradation.
+    if (cache.data && cache.data._cacheKey === cacheKey) {
+      return { ...cache.data, stale: true, error: err.message };
+    }
+    throw err;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Vercel Serverless Function handler
+// -----------------------------------------------------------------------------
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const category = (req.query.category || "all").toLowerCase();
+
+  try {
+    const data = await getNewsData(category);
+
+    // Cache for 10 minutes at the edge, serve stale up to 5 min longer
+    // while revalidating in the background.
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=600, stale-while-revalidate=300"
+    );
+    res.setHeader("Content-Type", "application/json");
+    return res.status(200).json(data);
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to fetch news data",
+      message: err.message,
     });
-  });
-}
-
-/**
- * Public init function called from app.js once the DOM is ready.
- */
-export function initNewsModule() {
-  initCategoryPills();
-  refreshNews();
-
-  if (newsRefreshTimer) clearInterval(newsRefreshTimer);
-  newsRefreshTimer = setInterval(() => refreshNews(currentCategory), NEWS_REFRESH_MS);
+  }
 }
