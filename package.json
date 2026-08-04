@@ -1,0 +1,41 @@
+{
+  "name": "financehub-india",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FinanceHub India — live NIFTY/SENSEX/Bank Nifty/India VIX/USD-INR/Gold/Silver/Brent/WTI market data, live financial news, and SIP/EMI/FD/Tax/Retirement calculators. 100% free Vercel Hobby deployment.",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static site — nothing to build. Vercel serves index.html + /api functions directly.'",
+    "build:partials": "node scripts/build-partials.js",
+    "build:partials:check": "node scripts/build-partials.js --check",
+    "new:article": "node scripts/new-article.js",
+    "publish": "node scripts/publish.js",
+    "publish:force": "node scripts/publish.js --force",
+    "validate": "node scripts/validate.js",
+    "migrate": "node scripts/migrate.js",
+    "clean": "node scripts/clean.js",
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "devDependencies": {
+    "vercel": "^37.0.0"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
+    "image-size": "^2.0.2",
+    "markdown-it": "^15.0.0",
+    "markdown-it-anchor": "^9.2.1",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-emoji": "^3.1.0",
+    "markdown-it-footnote": "^4.0.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  }
+}

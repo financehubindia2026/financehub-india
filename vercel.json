@@ -1,0 +1,99 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//comment": "FinanceHub India — Vercel project configuration. IMPORTANT: Vercel's Hobby (free) plan strictly limits Cron Jobs to a MAXIMUM of once per day per job — any expression that would fire more often (e.g. */30 * * * * or hourly) fails at deployment time, full stop. The two cron jobs below are therefore both once-daily, scheduled a few minutes apart so they don't compete for the same invocation window. This is fine because cron here is only a 'cache warmer': real-time freshness for visitors comes from the client-side setInterval polling in js/market.js (60s) and js/news.js (15min), which call the SAME /api/market and /api/news routes directly and trigger a fresh upstream fetch themselves whenever the 5-10 minute server cache has expired. Cron just makes sure the cache rarely starts cold. If you upgrade to Vercel Pro later, you can safely change these to */15 * * * * or similar for extra cache-warming frequency — see README.md.",
+
+  "functions": {
+    "api/market.js": {
+      "maxDuration": 10
+    },
+    "api/news.js": {
+      "maxDuration": 10
+    },
+    "api/cron-refresh-market.js": {
+      "maxDuration": 10
+    },
+    "api/cron-refresh-news.js": {
+      "maxDuration": 10
+    },
+    "api/timeline.js": {
+      "maxDuration": 10
+    },
+    "api/cron-refresh-timeline.js": {
+      "maxDuration": 10
+    }
+  },
+
+  "crons": [
+    {
+      "path": "/api/cron-refresh-market",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron-refresh-news",
+      "schedule": "5 3 * * *"
+    },
+    {
+      "path": "/api/cron-refresh-timeline",
+      "schedule": "10 3 * * *"
+    }
+  ],
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "geolocation=(), camera=(), microphone=()" }
+      ]
+    },
+    {
+      "source": "/css/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/js/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/api/market",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=60" }
+      ]
+    },
+    {
+      "source": "/api/news",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=300" }
+      ]
+    },
+    {
+      "source": "/api/timeline",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=300" }
+      ]
+    }
+  ],
+
+  "redirects": [
+    {
+      "source": "/articles/how-to-create-a-monthly-budget",
+      "destination": "/articles/personal-budget-guide",
+      "permanent": true
+    },
+    {
+      "source": "/articles/how-to-create-a-monthly-budget.html",
+      "destination": "/articles/personal-budget-guide",
+      "permanent": true
+    }
+  ],
+
+  "cleanUrls": true,
+  "trailingSlash": false
+}

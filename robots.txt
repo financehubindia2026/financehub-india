@@ -1,0 +1,14 @@
+# =============================================================================
+# robots.txt — FinanceHub India
+# Allows all well-behaved crawlers to index the site and points them to
+# the sitemap. Update the Host/Sitemap URL after you know your final
+# Vercel production domain (or custom domain).
+# =============================================================================
+
+User-agent: *
+Allow: /
+
+# Don't index the raw API JSON endpoints — they're data, not pages.
+Disallow: /api/
+
+Sitemap: https://financehub-india.vercel.app/sitemap.xml
