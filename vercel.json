@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": ".",
 
- 
   "functions": {
     "api/market.js": {
       "maxDuration": 10
