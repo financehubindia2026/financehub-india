@@ -76,14 +76,18 @@ const DISPLAY_META = {
 const OUNCE_TO_GRAM = 31.1035;
 
 /**
- * Fetches a batch of quotes from Yahoo Finance's public (keyless) quote
- * endpoint. This endpoint is widely used for non-commercial dashboards
- * and does not require authentication.
+ * Fetches a single quote from Yahoo Finance's public (keyless) CHART
+ * endpoint (v8). We use this instead of the older v7 "quote" batch
+ * endpoint because Yahoo now frequently rejects v7 requests from cloud
+ * / datacenter IPs (like Vercel's) with a 401 unless a valid session
+ * "crumb" is presented. The v8 chart endpoint remains open for
+ * unauthenticated, single-symbol requests, so we fetch symbols in
+ * parallel instead of as one batched call.
  */
-async function fetchYahooQuotes(symbols) {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(
-    symbols.join(",")
-  )}`;
+async function fetchYahooChartQuote(symbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol
+  )}?interval=1d&range=1d`;
 
   const res = await fetch(url, {
     headers: {
@@ -99,10 +103,51 @@ async function fetchYahooQuotes(symbols) {
   }
 
   const json = await res.json();
-  const results = json?.quoteResponse?.result;
+  const result = json?.chart?.result?.[0];
+  const meta = result?.meta;
 
-  if (!Array.isArray(results) || results.length === 0) {
-    throw new Error("Yahoo Finance returned no results");
+  if (!meta || typeof meta.regularMarketPrice !== "number") {
+    throw new Error("Yahoo Finance returned no usable data");
+  }
+
+  const price = meta.regularMarketPrice;
+  const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
+
+  return {
+    symbol: meta.symbol || symbol,
+    regularMarketPrice: price,
+    regularMarketPreviousClose: prevClose,
+    regularMarketChange: price - prevClose,
+    regularMarketChangePercent:
+      prevClose ? ((price - prevClose) / prevClose) * 100 : 0,
+  };
+}
+
+/**
+ * Fetches a batch of quotes by requesting each symbol from Yahoo's chart
+ * endpoint in parallel. Individual symbol failures don't abort the whole
+ * batch — we simply omit that symbol, and the caller's existing
+ * Twelve Data fallback logic (or stale cache) takes over for it.
+ */
+async function fetchYahooQuotes(symbols) {
+  const settled = await Promise.allSettled(
+    symbols.map((s) => fetchYahooChartQuote(s))
+  );
+
+  const results = [];
+  const failures = [];
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") {
+      results.push(s.value);
+    } else {
+      failures.push(`${symbols[i]}: ${s.reason.message}`);
+    }
+  });
+
+  if (results.length === 0) {
+    throw new Error(
+      failures.length ? failures.join("; ") : "Yahoo Finance returned no results"
+    );
   }
 
   return results;
@@ -236,8 +281,8 @@ async function getMarketData() {
     usdInr: "USD/INR",
     gold: "XAU/USD",
     silver: "XAG/USD",
-    brent: "BRENT",
-    wti: "WTI",
+    brent: "XBR/USD",
+    wti: "WTI/USD",
   };
 
   for (const [key, tdSymbol] of Object.entries(fallbackMap)) {
