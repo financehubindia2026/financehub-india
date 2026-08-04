@@ -20,7 +20,6 @@
 
 import { initMarketModule } from "./market.js";
 import { initNewsModule } from "./news.js";
-import { initTimelineModule } from "./timeline.js";
 
 // ---------------------------------------------------------------------------
 // THEME (dark / light mode toggle) — unchanged from the original site.
@@ -656,4 +655,3 @@ function renderCurrentDates() {
 renderCurrentDates();
 initMarketModule();
 initNewsModule();
-initTimelineModule();
