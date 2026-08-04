@@ -1,8 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
-  "//comment": "FinanceHub India — Vercel project configuration. IMPORTANT: Vercel's Hobby (free) plan strictly limits Cron Jobs to a MAXIMUM of once per day per job — any expression that would fire more often (e.g. */30 * * * * or hourly) fails at deployment time, full stop. The two cron jobs below are therefore both once-daily, scheduled a few minutes apart so they don't compete for the same invocation window. This is fine because cron here is only a 'cache warmer': real-time freshness for visitors comes from the client-side setInterval polling in js/market.js (60s) and js/news.js (15min), which call the SAME /api/market and /api/news routes directly and trigger a fresh upstream fetch themselves whenever the 5-10 minute server cache has expired. Cron just makes sure the cache rarely starts cold. If you upgrade to Vercel Pro later, you can safely change these to */15 * * * * or similar for extra cache-warming frequency — see README.md.",
-
+ 
   "functions": {
     "api/market.js": {
       "maxDuration": 10
