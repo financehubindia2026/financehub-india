@@ -1,0 +1,11 @@
+{
+  "_comment": "Rendered as-is, in order, in the homepage sidebar's Financial Calculators card. Add a new object here to add a new calculator to the sidebar automatically — no code changes needed. `url` is relative to index.html (the sidebar only renders on the homepage). `available: false` shows a 'Soon' badge but keeps the link clickable (it still routes to the calculators section). `icon` must be one of the keys in ICONS in scripts/lib/sidebar.js.",
+  "calculators": [
+    { "name": "SIP Calculator", "icon": "sip", "url": "#calculators", "available": true },
+    { "name": "EMI Calculator", "icon": "emi", "url": "#calculators", "available": true },
+    { "name": "FD Calculator", "icon": "fd", "url": "#calculators", "available": true },
+    { "name": "CAGR Calculator", "icon": "cagr", "url": "#calculators", "available": false },
+    { "name": "Loan Calculator", "icon": "loan", "url": "#calculators", "available": false },
+    { "name": "GST Calculator", "icon": "gst", "url": "#calculators", "available": false }
+  ]
+}

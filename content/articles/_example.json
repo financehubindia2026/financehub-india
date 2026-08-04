@@ -1,0 +1,40 @@
+{
+  "_comment": "Copy this file, rename it to your article's slug, fill it in, then run: npm run new:article -- content/articles/your-slug.json",
+
+  "slug": "what-is-a-demat-account-example",
+  "title": "What Is a Demat Account? A Simple Example Guide",
+  "metaDescription": "A short example article showing the new-article content format: what a demat account is, why you need one, and how to open it in India.",
+
+  "category": { "name": "Stock Market", "slug": "stock-market" },
+
+  "author": "Financehub India",
+  "datePublished": "2026-07-12",
+  "dateModified": "2026-07-12",
+
+  "keywords": [
+    "Demat Account",
+    "Demat Account India",
+    "How to Open Demat Account",
+    "Stock Market Basics"
+  ],
+
+  "bodyHtml": "<p class=\"lead\">A demat account holds your shares electronically, the same way a bank account holds your money. This example shows the article-body format the generator expects.</p><h2 id=\"what-is-a-demat-account\">What Is a Demat Account?</h2><p>It is an account that stores shares and securities in digital form instead of physical certificates.</p><h3 id=\"why-you-need-one\">Why You Need One</h3><p>You cannot buy or sell shares on the Indian stock market without one.</p><h2 id=\"how-to-open-one\">How to Open One</h2><p>Choose a broker, complete KYC, and link your bank account.</p>",
+
+  "faqs": [
+    { "question": "Is a demat account free?", "answer": "Most brokers offer free account opening; annual maintenance charges vary." },
+    { "question": "Can I have more than one demat account?", "answer": "Yes, you can hold multiple demat accounts with different brokers." }
+  ],
+
+  "relatedArticles": [
+    {
+      "href": "../articles/what-is-share-market-india.html",
+      "tag": "Stock Market",
+      "title": "What Is Share Market and How It Works in India",
+      "description": "Learn what the share market is and how it works in India."
+    }
+  ],
+
+  "sidebarLinks": [
+    { "href": "what-is-share-market-india.html", "title": "What Is Share Market and How It Works in India" }
+  ]
+}

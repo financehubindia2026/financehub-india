@@ -1,0 +1,13 @@
+{
+  "_comment": "Slugs must match content/articles/<slug>.md. Unknown, draft, or unpublished slugs are skipped automatically at build time — see scripts/lib/sidebar.js. Order here is display order. Keep this to 6-8 evergreen, beginner-friendly guides.",
+  "beginners": [
+    "what-is-share-market-india",
+    "how-to-start-a-sip-in-india",
+    "mutual-funds-for-beginners-complete-guide",
+    "what-is-ipo-how-to-invest-india",
+    "what-is-demat-account-india",
+    "what-is-fixed-deposit-fd",
+    "what-is-insurance-india",
+    "personal-finance-for-beginners-india"
+  ]
+}

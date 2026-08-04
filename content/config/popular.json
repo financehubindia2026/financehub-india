@@ -1,0 +1,6 @@
+{
+  "_comment": "mode: 'manual' uses the `manual` slug list below, in order. mode: 'auto' (recommended default) ranks by: featured articles first, then most recently published, until `count` is reached — see scripts/lib/sidebar.js resolvePopularArticles(). Swap in real analytics later (most-viewed / trending) by changing the 'auto' ranking function in one place; no template changes needed.",
+  "mode": "auto",
+  "count": 5,
+  "manual": []
+}
