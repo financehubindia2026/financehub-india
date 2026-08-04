@@ -8,18 +8,12 @@
 //      notice, calculator logic, the investor-style quiz, newsletter
 //      "subscribe" UI, copy-link, table-of-contents scroll-spy, and the
 //      reveal-on-scroll animation).
-//   2. Initialization calls for the two new live-data modules
-//      (market.js and news.js), which fetch from our serverless
-//      /api/market and /api/news routes.
-//   3. A small helper that replaces hardcoded dates (e.g. "June 26, 2026")
+//   2. A small helper that replaces hardcoded dates (e.g. "June 26, 2026")
 //      with today's real date wherever a `[data-current-date]` element
 //      exists in the markup.
 //
 // Loaded as: <script type="module" src="js/app.js"></script>
 // =============================================================================
-
-import { initMarketModule } from "./market.js";
-import { initNewsModule } from "./news.js";
 
 // ---------------------------------------------------------------------------
 // THEME (dark / light mode toggle) — unchanged from the original site.
@@ -113,14 +107,6 @@ const adConsent = localStorage.getItem("adConsent");
 if (adConsent === "granted") loadAds();
 else if (adConsent === "denied") loadAds(true);
 else showBanner();
-
-// ---------------------------------------------------------------------------
-// NOTE: The scrolling ticker strip at the top of the page (#ticker-track)
-// used to be filled with a hardcoded TICKS array here. That hardcoded
-// array has been REMOVED — the ticker is now populated with 100% live
-// data by js/market.js (see renderTickerStrip), refreshed every 60
-// seconds. Nothing else about its markup, animation, or styling changed.
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // CALCULATOR TABS — unchanged.
@@ -647,11 +633,8 @@ function renderCurrentDates() {
 }
 
 // ---------------------------------------------------------------------------
-// INITIALIZE LIVE DATA MODULES
-// market.js handles its own "Live Data · <date>" label; renderCurrentDates()
-// covers every OTHER hardcoded date on the page (article dateline, footer
-// copyright year context, etc.) so nothing manual is left behind.
+// renderCurrentDates() covers every hardcoded date on the page (article
+// dateline, footer copyright year context, etc.) so nothing manual is
+// left behind. Live market/news/timeline modules were removed.
 // ---------------------------------------------------------------------------
 renderCurrentDates();
-initMarketModule();
-initNewsModule();
