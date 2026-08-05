@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "npm run build:partials"
+    "build": "npm run build:partials",
     "build:partials": "node scripts/build-partials.js",
     "build:partials:check": "node scripts/build-partials.js --check",
     "new:article": "node scripts/new-article.js",
