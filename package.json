@@ -21,11 +21,10 @@
   "engines": {
     "node": ">=18.x"
   },
-  "devDependencies": {
-  },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "cheerio": "^1.2.0",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
