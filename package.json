@@ -22,7 +22,6 @@
     "node": ">=18.x"
   },
   "devDependencies": {
-    "vercel": "^37.0.0"
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
