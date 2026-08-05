@@ -1,36 +1,4 @@
 #!/usr/bin/env node
-/**
- * build-partials.js
- * -------------------------------------------------------------------------
- * Injects the shared header/footer partials (partials/site-header.html,
- * partials/footer-article.html, partials/footer-category.html) into every
- * page in articles/ and category/.
- *
- * Why this exists:
- * The site is deployed as plain static HTML (no framework, no build step
- * at request time — Vercel just serves the files as-is). That's simple and
- * fast, but it means the header/nav and footer used to be copy-pasted into
- * all 88 article + category files. Editing the nav meant hand-editing 88
- * files. This script keeps a SINGLE source of truth for each partial and
- * "compiles" it into every page, so the deployed output is still 100%
- * plain static HTML — nothing changes about how the site is hosted.
- *
- * Usage:
- *   node scripts/build-partials.js         # apply partials to all pages
- *   node scripts/build-partials.js --check # dry-run: report pages that
- *                                           # would change, don't write
- *
- * How to edit the site-wide header or footer:
- *   1. Edit the relevant file in partials/
- *   2. Run: npm run build:partials
- *   3. Commit the changed article/category files along with the partial.
- *
- * This script is idempotent — safe to run repeatedly. It finds the existing
- * <header class="site-header" ...>...</header> block and the existing
- * <footer class="site-footer">...</footer> block in each target file (by
- * tag, not by exact content) and replaces them wholesale.
- * -------------------------------------------------------------------------
- */
 
 import fs from "fs";
 import path from "path";
@@ -42,76 +10,107 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
 const PARTIALS_DIR = path.join(ROOT, "partials");
 
-const HEADER_RE = /<header class="site-header"[\s\S]*?<\/header>/;
-const FOOTER_RE = /<footer class="site-footer">[\s\S]*?<\/footer>/;
-
 const isCheckMode = process.argv.includes("--check");
+
+const HEADER_RE = /<header class="site-header"[\s\S]*?<\/header>/i;
+const FOOTER_RE = /<footer class="site-footer"[\s\S]*?<\/footer>/i;
+const HEAD_CLOSE_RE = /<\/head>/i;
+
+const SKIP_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "partials",
+  ".vercel",
+  ".github"
+]);
 
 function loadPartial(name) {
   return fs.readFileSync(path.join(PARTIALS_DIR, name), "utf8").trim();
 }
 
+const HEAD_PARTIAL = loadPartial("head.html");
 const HEADER_PARTIAL = loadPartial("site-header.html");
-const FOOTER_ARTICLE_PARTIAL = loadPartial("footer-article.html");
-const FOOTER_CATEGORY_PARTIAL = loadPartial("footer-category.html");
+const FOOTER_ARTICLE = loadPartial("footer-article.html");
+const FOOTER_CATEGORY = loadPartial("footer-category.html");
 
-function listHtmlFiles(dir) {
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith(".html"))
-    .map((f) => path.join(dir, f));
-}
+function walk(dir) {
+  let files = [];
 
-function applyPartials(filePath, footerPartial) {
-  const original = fs.readFileSync(filePath, "utf8");
-  let updated = original;
-
-  if (!HEADER_RE.test(updated)) {
-    console.warn(`  ⚠️  No <header class="site-header"> found in ${filePath} — skipped header.`);
-  } else {
-    updated = updated.replace(HEADER_RE, HEADER_PARTIAL);
-  }
-
-  if (!FOOTER_RE.test(updated)) {
-    console.warn(`  ⚠️  No <footer class="site-footer"> found in ${filePath} — skipped footer.`);
-  } else {
-    updated = updated.replace(FOOTER_RE, footerPartial);
-  }
-
-  const changed = updated !== original;
-  if (changed && !isCheckMode) {
-    fs.writeFileSync(filePath, updated, "utf8");
-  }
-  return changed;
-}
-
-function run() {
-  const targets = [
-    { dir: path.join(ROOT, "articles"), footer: FOOTER_ARTICLE_PARTIAL, label: "articles" },
-    { dir: path.join(ROOT, "category"), footer: FOOTER_CATEGORY_PARTIAL, label: "category" },
-  ];
-
-  let totalChanged = 0;
-  let totalFiles = 0;
-
-  for (const { dir, footer, label } of targets) {
-    const files = listHtmlFiles(dir);
-    console.log(`\n${label}/ — ${files.length} files`);
-    for (const file of files) {
-      totalFiles += 1;
-      const changed = applyPartials(file, footer);
-      if (changed) {
-        totalChanged += 1;
-        console.log(`  ${isCheckMode ? "would update" : "updated"}: ${path.relative(ROOT, file)}`);
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) {
+        files.push(...walk(path.join(dir, entry.name)));
       }
+      continue;
+    }
+
+    if (entry.name.endsWith(".html")) {
+      files.push(path.join(dir, entry.name));
     }
   }
 
-  console.log(
-    `\n${isCheckMode ? "[check mode] " : ""}${totalChanged}/${totalFiles} files ${
-      isCheckMode ? "would be" : "were"
-    } updated.\n`
-  );
+  return files;
 }
 
-run();
+function footerFor(file) {
+  const rel = path.relative(ROOT, file).replace(/\\/g, "/");
+
+  if (rel.startsWith("category/")) return FOOTER_CATEGORY;
+
+  return FOOTER_ARTICLE;
+}
+
+function apply(file) {
+  const original = fs.readFileSync(file, "utf8");
+
+  let html = original;
+
+  // Inject head partial
+  if (
+    HEAD_CLOSE_RE.test(html) &&
+    !html.includes("G-H6F7NMRFB6")
+  ) {
+    html = html.replace(
+      HEAD_CLOSE_RE,
+      `${HEAD_PARTIAL}\n</head>`
+    );
+  }
+
+  // Replace header
+  if (HEADER_RE.test(html)) {
+    html = html.replace(HEADER_RE, HEADER_PARTIAL);
+  }
+
+  // Replace footer
+  if (FOOTER_RE.test(html)) {
+    html = html.replace(
+      FOOTER_RE,
+      footerFor(file)
+    );
+  }
+
+  if (html !== original) {
+    if (!isCheckMode) {
+      fs.writeFileSync(file, html, "utf8");
+    }
+    return true;
+  }
+
+  return false;
+}
+
+const htmlFiles = walk(ROOT);
+
+let updated = 0;
+
+for (const file of htmlFiles) {
+  if (apply(file)) {
+    updated++;
+    console.log(
+      `${isCheckMode ? "Would update" : "Updated"} ${path.relative(ROOT, file)}`
+    );
+  }
+}
+
+console.log("");
+console.log(`${updated}/${htmlFiles.length} HTML files updated.`);
