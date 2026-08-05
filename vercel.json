@@ -1,80 +1,45 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": ".",
-  "functions": {
-    "api/market.js": {
-      "maxDuration": 10
-    },
-    "api/news.js": {
-      "maxDuration": 10
-    },
-    "api/cron-refresh-market.js": {
-      "maxDuration": 10
-    },
-    "api/cron-refresh-news.js": {
-      "maxDuration": 10
-    },
-    "api/timeline.js": {
-      "maxDuration": 10
-    },
-    "api/cron-refresh-timeline.js": {
-      "maxDuration": 10
-    }
-  },
-
-  "crons": [
-    {
-      "path": "/api/cron-refresh-market",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron-refresh-news",
-      "schedule": "5 3 * * *"
-    },
-    {
-      "path": "/api/cron-refresh-timeline",
-      "schedule": "10 3 * * *"
-    }
-  ],
 
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), camera=(), microphone=()" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "geolocation=(), camera=(), microphone=()"
+        }
       ]
     },
     {
       "source": "/css/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, must-revalidate"
+        }
       ]
     },
     {
       "source": "/js/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/api/market",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=60" }
-      ]
-    },
-    {
-      "source": "/api/news",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=300" }
-      ]
-    },
-    {
-      "source": "/api/timeline",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=300" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, must-revalidate"
+        }
       ]
     }
   ],
