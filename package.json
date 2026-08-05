@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo 'Static site — nothing to build. Vercel serves index.html + /api functions directly.'",
+    "build": "npm run build:partials"
     "build:partials": "node scripts/build-partials.js",
     "build:partials:check": "node scripts/build-partials.js --check",
     "new:article": "node scripts/new-article.js",
