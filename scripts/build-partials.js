@@ -65,16 +65,39 @@ function apply(file) {
 
   let html = original;
 
-  // Inject head partial
-  if (
-    HEAD_CLOSE_RE.test(html) &&
-    !html.includes("G-H6F7NMRFB6")
-  ) {
+  // Inject / update head partial
+if (HEAD_CLOSE_RE.test(html)) {
+  const hasAdSense = html.includes("pagead2.googlesyndication.com");
+  const hasGA4 = html.includes("G-H6F7NMRFB6");
+
+  // Existing pages already contain the old GA4 head partial.
+  // Replace the existing Google Analytics section with the
+  // current head partial so AdSense is added without duplicating GA4.
+  if (hasGA4 && !hasAdSense) {
+    const GA4_SECTION_RE =
+      /<!-- Google Analytics 4 -->[\s\S]*?<\/script>\s*<\/head>/i;
+
+    if (GA4_SECTION_RE.test(html)) {
+      html = html.replace(
+        GA4_SECTION_RE,
+        `${HEAD_PARTIAL}\n</head>`
+      );
+    } else {
+      html = html.replace(
+        HEAD_CLOSE_RE,
+        `${HEAD_PARTIAL}\n</head>`
+      );
+    }
+  }
+
+  // For pages that don't have the head partial yet.
+  else if (!hasGA4 && !hasAdSense) {
     html = html.replace(
       HEAD_CLOSE_RE,
       `${HEAD_PARTIAL}\n</head>`
     );
   }
+}
 
   // Replace header
   if (HEADER_RE.test(html)) {
